@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDV Restaurante</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="topo">
+  <strong class="marca">PDV Restaurante</strong>
+  <nav id="menu">
+    <button data-tab="salao">Salão</button>
+    <button data-tab="cozinha">Cozinha e bar</button>
+    <button data-tab="caixa">Caixa</button>
+    <button data-tab="estoque">Estoque</button>
+    <button data-tab="cardapio">Cardápio</button>
+    <button data-tab="relatorios">Relatórios</button>
+  </nav>
+  <span id="pillCaixa" class="pill">...</span>
+</header>
+
+<main id="view"></main>
+<div id="toasts"></div>
+
+<footer class="rodape-site">
+  <a href="/swagger">Documentação da API</a>
+  <a href="/kds.html">Tela cheia da cozinha</a>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

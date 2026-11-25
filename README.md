@@ -38,8 +38,11 @@ mvn spring-boot:run
 Sobe na porta 8080 com um banco H2 em arquivo (`./data/pdv`) e já carrega um cardápio de hamburgueria, estoque e
 10 mesas, para dar para testar sem cadastrar nada.
 
+Abra http://localhost:8080 no navegador. Essa é a interface do restaurante (salão, cozinha, caixa, estoque,
+cardápio e relatórios), explicada na próxima seção. A API que ela usa continua aberta:
+
 - Documentação interativa da API: http://localhost:8080/swagger
-- Tela da cozinha: http://localhost:8080/kds.html
+- Tela cheia da fila de produção, para deixar numa TV na cozinha: http://localhost:8080/kds.html
 
 Com PostgreSQL e Docker:
 
@@ -53,9 +56,26 @@ Testes:
 mvn test
 ```
 
-## Um atendimento do começo ao fim
+## Como o restaurante usa
 
-Os ids abaixo assumem os dados de exemplo (mesa 1 = id 1, X-Burger = id 1, cerveja = id 3).
+A interface roda no navegador, sem instalar nada além do servidor. Funciona em computador, tablet e celular
+(o garçom pode lançar pedido pelo próprio telefone). Cada aba atende uma função:
+
+| Aba | Quem usa | O que faz |
+|---|---|---|
+| Salão | Garçom | Mapa de mesas. Mesa verde está livre, laranja está ocupada e mostra o total. Aparece um balão "N prontos" quando a cozinha terminou algo para levar. Tocar na mesa abre a comanda. |
+| Comanda | Garçom e caixa | Toque nos produtos para lançar (com observação, ex.: "sem cebola"). Cancela item, marca como entregue, recebe pagamento, divide a conta e fecha. |
+| Cozinha e bar | Cozinha, bar | Fila por praça com o tempo de espera de cada pedido; fica vermelha depois de 15 minutos. Um botão inicia o preparo e outro marca como pronto. |
+| Caixa | Caixa | Abre com o troco inicial e fecha contando a gaveta; mostra a diferença. |
+| Estoque | Gerente | Saldos, alerta de reposição, entrada de mercadoria e cadastro de insumo. |
+| Cardápio | Gerente | Cadastro de produtos com preço, praça e ficha técnica; mostra custo e margem. |
+| Relatórios | Dono | Faturamento, custo, margem, ticket médio e ranking de produtos por período. |
+
+O primeiro passo do dia é abrir o caixa. Sem caixa aberto o sistema não aceita pagamento (ver as decisões abaixo).
+
+## O mesmo atendimento direto pela API
+
+Quem for integrar com outro sistema pode usar a API sem a interface. Os ids abaixo assumem os dados de exemplo (mesa 1 = id 1, X-Burger = id 1, cerveja = id 3).
 
 ```bash
 # 1. abrir o caixa
@@ -183,6 +203,29 @@ pedido, com os minutos de espera calculados no servidor. A sequência de status 
 (`PENDENTE -> EM_PREPARO -> PRONTO -> ENTREGUE`), para ninguém marcar "pronto" sem ter iniciado e distorcer o
 tempo de preparo. A tela `kds.html` consulta a API a cada 5 segundos; é simples de propósito, ver limitações.
 
+### Interface em HTML, CSS e JavaScript puros, sem framework
+
+A tela é servida pelo próprio Spring (pasta `static`). Foi uma escolha de propósito: não há Node, build nem
+segunda aplicação para subir. Quem baixa o projeto roda um comando e tem o sistema completo, e o restaurante
+pequeno que não tem quem cuide de infraestrutura mantém um serviço só. O custo é código de tela mais manual; se o
+projeto crescer muito, vale migrar para React ou Vue.
+
+Alguns detalhes da interface que vieram de uso real:
+
+- **Cada toque num produto vira um item.** Os toques entram numa fila e chegam ao servidor na ordem. Ignorar toques
+  enquanto o servidor responde parece seguro, mas o garçom que toca X-Burger e logo em seguida a cerveja perderia
+  o segundo pedido sem perceber.
+- **A comanda aberta se atualiza sozinha a cada 6 segundos**, para o "pronto" aparecer sem recarregar. A atualização
+  é suspensa enquanto há toques na fila, para uma resposta atrasada não apagar um item recém-lançado.
+- **Resposta de uma aba antiga não sobrescreve a atual.** Se o usuário troca de aba antes de a anterior terminar de
+  carregar, o resultado atrasado é descartado.
+- **A divisão de conta deixa pagar parte por parte.** Cada pessoa recebe na forma que quiser, a parte paga fica
+  marcada, e o restante da comanda se atualiza. É o fluxo real de mesa grande.
+- **O troco aparece enquanto o valor entregue é digitado**, para o caixa não precisar calcular de cabeça.
+- **Cancelar item em preparo avisa que haverá perda de insumo** antes de confirmar.
+- **Todo texto vindo do banco é escapado** antes de entrar no HTML, para um nome de produto com `<` ou aspas não
+  quebrar a tela nem executar script.
+
 ### Erros no formato RFC 7807
 
 Todos os erros saem como `ProblemDetail` (`type`, `title`, `status`, `detail`), formato que o próprio Spring já
@@ -225,14 +268,19 @@ src/main/java/br/com/pdv
   dto/         contratos de entrada e saída da API
   web/         controllers finos e tratamento de erros
   config/      dados de exemplo
+src/main/resources/static
+  index.html, app.css, app.js   interface do restaurante
+  kds.html                      fila de produção em tela cheia
 ```
 
 ## Limitações conhecidas
 
 Este é um ponto de partida, não um sistema pronto para colocar em produção amanhã. O que falta:
 
-- **Sem autenticação nem perfis.** Qualquer cliente da API faz tudo. Para uso real é preciso login e separar
-  garçom, cozinha, caixa e gerente (Spring Security).
+- **Sem autenticação nem perfis.** Qualquer pessoa com acesso à rede abre qualquer aba e faz qualquer coisa
+  (inclusive cancelar item ou ver o relatório). Para uso real é preciso login e separar garçom, cozinha, caixa e
+  gerente (Spring Security). Até lá, rode o sistema só numa rede interna do restaurante.
+- **A interface não tem testes automatizados.** O back-end tem; a tela foi verificada à mão no navegador.
 - **Sem emissão fiscal** (NFC-e/SAT) nem integração com maquininha ou impressora.
 - **O esquema do banco é gerado pelo Hibernate** (`ddl-auto: update`). Serve para começar; em produção o certo é
   migração versionada com Flyway ou Liquibase.
