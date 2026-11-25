@@ -10,7 +10,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class EstoqueService {
@@ -60,9 +62,10 @@ public class EstoqueService {
      * faltar, a exceção desfaz também as baixas anteriores e o pedido inteiro é recusado.
      */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void consumir(Produto produto, int quantidade, String referencia) {
+    public Map<Long, BigDecimal> consumir(Produto produto, int quantidade, String referencia) {
+        Map<Long, BigDecimal> consumido = new LinkedHashMap<>();
         for (ItemFicha linha : linhasOrdenadas(produto)) {
-            Insumo insumo = travar(linha);
+            Insumo insumo = travar(linha.getInsumo().getId());
             BigDecimal necessario = linha.getQuantidade().multiply(BigDecimal.valueOf(quantidade));
             if (insumo.getEstoqueAtual().compareTo(necessario) < 0) {
                 throw new EstoqueInsuficienteException(insumo.getNome(), insumo.getUnidade(),
@@ -70,26 +73,36 @@ public class EstoqueService {
             }
             insumo.baixar(necessario);
             movimentos.save(new MovimentoEstoque(insumo, TipoMovimento.SAIDA_VENDA, necessario.negate(), referencia));
+            consumido.put(insumo.getId(), necessario);
+        }
+        return consumido;
+    }
+
+    /**
+     * Item cancelado antes de ir para a produção: o insumo volta para o estoque. Recebe o consumo gravado no
+     * item (e não a ficha atual do produto), para devolver exatamente o que saiu.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void estornar(Map<Long, BigDecimal> consumo, String referencia) {
+        for (Map.Entry<Long, BigDecimal> e : ordenado(consumo)) {
+            Insumo insumo = travar(e.getKey());
+            insumo.repor(e.getValue());
+            movimentos.save(new MovimentoEstoque(insumo, TipoMovimento.ESTORNO, e.getValue(), referencia));
         }
     }
 
-    /** Item cancelado antes de ir para a produção: o insumo volta para o estoque. */
+    /**
+     * Item cancelado depois de começar a ser preparado: o insumo já foi usado, vira perda registrada.
+     * O saldo não muda (a baixa da venda já saiu), mas o histórico precisa continuar fechando com o saldo: o
+     * ESTORNO desfaz a saída da venda e a PERDA registra a saída definitiva, então a soma dos movimentos
+     * continua igual ao saldo.
+     */
     @Transactional(propagation = Propagation.MANDATORY)
-    public void estornar(Produto produto, int quantidade, String referencia) {
-        for (ItemFicha linha : linhasOrdenadas(produto)) {
-            Insumo insumo = travar(linha);
-            BigDecimal qtd = linha.getQuantidade().multiply(BigDecimal.valueOf(quantidade));
-            insumo.repor(qtd);
-            movimentos.save(new MovimentoEstoque(insumo, TipoMovimento.ESTORNO, qtd, referencia));
-        }
-    }
-
-    /** Item cancelado depois de começar a ser preparado: o insumo já foi usado, vira perda registrada. */
-    @Transactional(propagation = Propagation.MANDATORY)
-    public void registrarPerda(Produto produto, int quantidade, String referencia) {
-        for (ItemFicha linha : linhasOrdenadas(produto)) {
-            BigDecimal qtd = linha.getQuantidade().multiply(BigDecimal.valueOf(quantidade));
-            movimentos.save(new MovimentoEstoque(linha.getInsumo(), TipoMovimento.PERDA, qtd.negate(), referencia));
+    public void registrarPerda(Map<Long, BigDecimal> consumo, String referencia) {
+        for (Map.Entry<Long, BigDecimal> e : ordenado(consumo)) {
+            Insumo insumo = insumos.getReferenceById(e.getKey());
+            movimentos.save(new MovimentoEstoque(insumo, TipoMovimento.ESTORNO, e.getValue(), referencia));
+            movimentos.save(new MovimentoEstoque(insumo, TipoMovimento.PERDA, e.getValue().negate(), referencia));
         }
     }
 
@@ -100,8 +113,11 @@ public class EstoqueService {
                 .toList();
     }
 
-    private Insumo travar(ItemFicha linha) {
-        Long id = linha.getInsumo().getId();
+    private List<Map.Entry<Long, BigDecimal>> ordenado(Map<Long, BigDecimal> consumo) {
+        return consumo.entrySet().stream().sorted(Map.Entry.comparingByKey()).toList();
+    }
+
+    private Insumo travar(Long id) {
         return insumos.findByIdForUpdate(id).orElseThrow(() -> new RecursoNaoEncontradoException("Insumo", id));
     }
 }

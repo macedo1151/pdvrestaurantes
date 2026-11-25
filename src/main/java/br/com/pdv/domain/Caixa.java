@@ -30,6 +30,13 @@ public class Caixa {
     @Column(precision = 12, scale = 2)
     private BigDecimal valorContado;
 
+    /**
+     * TRUE enquanto o caixa está aberto e NULL depois de fechado. A restrição de unicidade do banco aceita vários
+     * NULL, mas só um TRUE: é ela que impede dois caixas abertos quando duas aberturas chegam juntas.
+     */
+    @Column(unique = true)
+    private Boolean abertoUnico = Boolean.TRUE;
+
     protected Caixa() {
     }
 
@@ -40,6 +47,7 @@ public class Caixa {
 
     public void fechar(BigDecimal valorContado) {
         this.status = StatusCaixa.FECHADO;
+        this.abertoUnico = null;
         this.valorContado = valorContado;
         this.fechadoEm = Instant.now();
     }

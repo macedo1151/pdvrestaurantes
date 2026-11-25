@@ -4,6 +4,7 @@ import br.com.pdv.domain.*;
 import br.com.pdv.dto.Dtos.*;
 import br.com.pdv.repository.CaixaRepository;
 import br.com.pdv.repository.PagamentoRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,8 +28,13 @@ public class CaixaService {
         if (caixas.findFirstByStatus(StatusCaixa.ABERTO).isPresent()) {
             throw new RegraDeNegocioException("Já existe um caixa aberto");
         }
-        Caixa caixa = caixas.save(new Caixa(Money.of(r.valorAbertura()), r.operador()));
-        return resumo(caixa);
+        try {
+            // saveAndFlush: a violação da unicidade aparece aqui e não só no commit
+            Caixa caixa = caixas.saveAndFlush(new Caixa(Money.of(r.valorAbertura()), r.operador()));
+            return resumo(caixa);
+        } catch (DataIntegrityViolationException concorrente) {
+            throw new RegraDeNegocioException("Já existe um caixa aberto");
+        }
     }
 
     @Transactional(readOnly = true)

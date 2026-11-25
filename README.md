@@ -210,7 +210,7 @@ segunda aplicação para subir. Quem baixa o projeto roda um comando e tem o sis
 pequeno que não tem quem cuide de infraestrutura mantém um serviço só. O custo é código de tela mais manual; se o
 projeto crescer muito, vale migrar para React ou Vue.
 
-Alguns detalhes da interface que vieram de uso real:
+Alguns detalhes da interface, pensados para o fluxo de salão:
 
 - **Cada toque num produto vira um item.** Os toques entram numa fila e chegam ao servidor na ordem. Ignorar toques
   enquanto o servidor responde parece seguro, mas o garçom que toca X-Burger e logo em seguida a cerveja perderia

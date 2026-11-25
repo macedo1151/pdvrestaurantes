@@ -7,6 +7,7 @@ RUN mvn -q package -DskipTests
 
 FROM eclipse-temurin:21-jre
 WORKDIR /app
+ENV TZ=America/Sao_Paulo
 COPY --from=build /app/target/pdv-restaurante-1.0.0.jar app.jar
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]

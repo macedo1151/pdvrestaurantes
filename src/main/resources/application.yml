@@ -25,6 +25,8 @@ pdv:
   seed: true
   # Serviço (gorjeta) padrão, em %, aplicado ao abrir uma comanda
   servico-padrao: 10
+  # Fuso do restaurante: define onde começa e termina o "dia" nos relatórios (independe do fuso da máquina/contêiner)
+  fuso: America/Sao_Paulo
 
 ---
 spring:

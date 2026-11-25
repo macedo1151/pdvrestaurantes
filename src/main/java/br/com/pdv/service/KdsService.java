@@ -4,6 +4,7 @@ import br.com.pdv.domain.ItemComanda;
 import br.com.pdv.domain.Praca;
 import br.com.pdv.domain.StatusItem;
 import br.com.pdv.dto.Dtos.KdsItemDto;
+import br.com.pdv.repository.ComandaRepository;
 import br.com.pdv.repository.ItemComandaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,9 +17,11 @@ import java.util.List;
 public class KdsService {
 
     private final ItemComandaRepository itens;
+    private final ComandaRepository comandas;
 
-    public KdsService(ItemComandaRepository itens) {
+    public KdsService(ItemComandaRepository itens, ComandaRepository comandas) {
         this.itens = itens;
+        this.comandas = comandas;
     }
 
     @Transactional(readOnly = true)
@@ -27,8 +30,16 @@ public class KdsService {
                 .stream().map(KdsItemDto::from).toList();
     }
 
+    /**
+     * Trava a comanda antes de ler o item, na mesma ordem das operações do garçom (comanda primeiro).
+     * Assim o cancelamento e o "iniciar" da cozinha nunca se sobrepõem: quem chega depois enxerga o estado
+     * já gravado pelo outro, e um item cancelado não volta para a fila.
+     */
     @Transactional
     public KdsItemDto mudarStatus(Long itemId, StatusItem novo) {
+        Long comandaId = itens.findComandaId(itemId).orElseThrow(() -> new RecursoNaoEncontradoException("Item", itemId));
+        comandas.findByIdForUpdate(comandaId).orElseThrow(() -> new RecursoNaoEncontradoException("Comanda", comandaId));
+        // o item só é carregado depois da trava, então traz o estado mais recente
         ItemComanda item = itens.findById(itemId).orElseThrow(() -> new RecursoNaoEncontradoException("Item", itemId));
         if (!item.getStatus().podeAvancarPara(novo)) {
             throw new RegraDeNegocioException("Não é possível ir de %s para %s".formatted(item.getStatus(), novo));

@@ -3,6 +3,9 @@ package br.com.pdv.domain;
 import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 @Entity
 @Table(name = "item_comanda")
@@ -44,6 +47,21 @@ public class ItemComanda {
 
     private Instant atualizadoEm = Instant.now();
 
+    /** Rede de segurança: se duas gravações do mesmo item escaparem da trava da comanda, a segunda falha. */
+    @Version
+    @Column(nullable = false, columnDefinition = "bigint default 0")
+    private long version;
+
+    /**
+     * Quanto de cada insumo (id do insumo -> quantidade) saiu do estoque quando o item foi pedido. O estorno
+     * e a perda usam isto, e não a ficha atual, que pode ter mudado depois do pedido.
+     */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "item_consumo", joinColumns = @JoinColumn(name = "item_id"))
+    @MapKeyColumn(name = "insumo_id")
+    @Column(name = "quantidade", nullable = false, precision = 14, scale = 3)
+    private Map<Long, BigDecimal> consumo = new HashMap<>();
+
     protected ItemComanda() {
     }
 
@@ -64,6 +82,12 @@ public class ItemComanda {
     public BigDecimal custoTotal() {
         return custoUnitario.multiply(BigDecimal.valueOf(quantidade));
     }
+
+    public void registrarConsumo(Map<Long, BigDecimal> consumido) {
+        this.consumo = new HashMap<>(consumido);
+    }
+
+    public Map<Long, BigDecimal> getConsumo() { return Collections.unmodifiableMap(consumo); }
 
     public void mudarStatus(StatusItem novo) {
         this.status = novo;

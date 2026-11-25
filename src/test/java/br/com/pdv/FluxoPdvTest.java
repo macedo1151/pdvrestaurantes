@@ -36,7 +36,7 @@ class FluxoPdvTest {
 
     @BeforeEach
     void limpar() {
-        for (String tabela : List.of("pagamento", "item_comanda", "comanda", "caixa", "movimento_estoque",
+        for (String tabela : List.of("pagamento", "item_consumo", "item_comanda", "comanda", "caixa", "movimento_estoque",
                 "item_ficha", "produto", "insumo", "mesa")) {
             jdbc.update("delete from " + tabela);
         }

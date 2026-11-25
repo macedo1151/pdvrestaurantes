@@ -33,7 +33,8 @@ public class ComandaService {
 
     @Transactional
     public ComandaDto abrir(AbrirComandaRequest r) {
-        Mesa mesa = mesas.findById(r.mesaId()).orElseThrow(() -> new RecursoNaoEncontradoException("Mesa", r.mesaId()));
+        // trava a mesa: a checagem de status abaixo não pode ser feita por duas requisições ao mesmo tempo
+        Mesa mesa = mesas.findByIdForUpdate(r.mesaId()).orElseThrow(() -> new RecursoNaoEncontradoException("Mesa", r.mesaId()));
         if (mesa.getStatus() == StatusMesa.OCUPADA) {
             throw new RegraDeNegocioException("A mesa " + mesa.getNumero() + " já tem uma comanda aberta");
         }
@@ -59,8 +60,10 @@ public class ComandaService {
         if (!p.isAtivo()) {
             throw new RegraDeNegocioException("O produto " + p.getNome() + " está desativado");
         }
-        estoque.consumir(p, r.quantidade(), "comanda " + c.getId());
-        c.getItens().add(new ItemComanda(c, p, r.quantidade(), r.observacao()));
+        Map<Long, BigDecimal> consumo = estoque.consumir(p, r.quantidade(), "comanda " + c.getId());
+        ItemComanda novo = new ItemComanda(c, p, r.quantidade(), r.observacao());
+        novo.registrarConsumo(consumo);
+        c.getItens().add(novo);
         comandas.flush(); // gera o id do item antes de montar a resposta
         return ComandaDto.from(c);
     }
@@ -74,8 +77,8 @@ public class ComandaService {
             case CANCELADO -> throw new RegraDeNegocioException("Item já cancelado");
             case PRONTO, ENTREGUE -> throw new RegraDeNegocioException(
                     "Item já preparado; o cancelamento exige ajuste do gerente");
-            case PENDENTE -> estoque.estornar(item.getProduto(), item.getQuantidade(), "cancelamento comanda " + c.getId());
-            case EM_PREPARO -> estoque.registrarPerda(item.getProduto(), item.getQuantidade(), "cancelamento comanda " + c.getId());
+            case PENDENTE -> estoque.estornar(item.getConsumo(), "cancelamento comanda " + c.getId());
+            case EM_PREPARO -> estoque.registrarPerda(item.getConsumo(), "cancelamento comanda " + c.getId());
         }
         item.mudarStatus(StatusItem.CANCELADO);
         if (c.restante().signum() < 0) {
@@ -143,7 +146,8 @@ public class ComandaService {
         Map<Long, ItemComanda> ativos = new HashMap<>();
         c.itensAtivos().forEach(i -> ativos.put(i.getId(), i));
         Set<Long> usados = new HashSet<>();
-        List<ParteDto> partes = new ArrayList<>();
+        List<String> pagadores = new ArrayList<>();
+        List<BigDecimal> subtotais = new ArrayList<>();
         for (GrupoItensRequest g : r.grupos()) {
             BigDecimal subtotal = BigDecimal.ZERO;
             for (Long itemId : g.itemIds()) {
@@ -156,13 +160,24 @@ public class ComandaService {
                 }
                 subtotal = subtotal.add(item.total());
             }
-            subtotal = Money.of(subtotal);
-            BigDecimal servico = Money.percentual(subtotal, c.getPercentualServico());
-            partes.add(new ParteDto(g.pagador(), subtotal, servico, subtotal.add(servico)));
+            pagadores.add(g.pagador());
+            subtotais.add(Money.of(subtotal));
         }
-        BigDecimal naoAtribuido = ativos.entrySet().stream().filter(e -> !usados.contains(e.getKey()))
-                .map(e -> e.getValue().total()).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return new DivisaoItensDto(partes, Money.of(naoAtribuido));
+        BigDecimal naoAtribuido = Money.of(ativos.entrySet().stream().filter(e -> !usados.contains(e.getKey()))
+                .map(e -> e.getValue().total()).reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        // O serviço da conta é rateado de uma vez (maiores restos), e não arredondado por pessoa:
+        // assim as partes somam exatamente o total da comanda. A última fatia é a do que ainda não foi atribuído.
+        List<BigDecimal> pesos = new ArrayList<>(subtotais);
+        pesos.add(naoAtribuido);
+        List<BigDecimal> servicos = Money.ratearProporcional(c.servico(), pesos);
+
+        List<ParteDto> partes = new ArrayList<>();
+        for (int i = 0; i < pagadores.size(); i++) {
+            partes.add(new ParteDto(pagadores.get(i), subtotais.get(i), servicos.get(i),
+                    subtotais.get(i).add(servicos.get(i))));
+        }
+        return new DivisaoItensDto(partes, naoAtribuido);
     }
 
     private Comanda abertaTravada(Long id) {

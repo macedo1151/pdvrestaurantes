@@ -7,6 +7,7 @@ import br.com.pdv.domain.StatusComanda;
 import br.com.pdv.dto.Dtos.ProdutoVendidoDto;
 import br.com.pdv.dto.Dtos.VendasDto;
 import br.com.pdv.repository.ComandaRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,8 +25,12 @@ public class RelatorioService {
 
     private final ComandaRepository comandas;
 
-    public RelatorioService(ComandaRepository comandas) {
+    private final ZoneId zona;
+
+    /** O fuso do restaurante vem da configuração: no contêiner o fuso do sistema costuma ser UTC. */
+    public RelatorioService(ComandaRepository comandas, @Value("${pdv.fuso:America/Sao_Paulo}") ZoneId zona) {
         this.comandas = comandas;
+        this.zona = zona;
     }
 
     /** Vendas das comandas fechadas entre as datas (ambas inclusive). */
@@ -34,7 +39,6 @@ public class RelatorioService {
         if (ate.isBefore(de)) {
             throw new RegraDeNegocioException("A data final é anterior à inicial");
         }
-        ZoneId zona = ZoneId.systemDefault();
         List<Comanda> fechadas = comandas.findFechadasNoPeriodo(StatusComanda.FECHADA,
                 de.atStartOfDay(zona).toInstant(), ate.plusDays(1).atStartOfDay(zona).toInstant());
 
