@@ -241,3 +241,7 @@ Este é um ponto de partida, não um sistema pronto para colocar em produção a
 - **O KDS consulta por polling.** Com poucas telas funciona bem; com muitas, o próximo passo é WebSocket ou SSE.
 - **Gorjeta fixa em percentual.** Não há gorjeta em valor nem rateio do serviço entre a equipe.
 - **Um caixa aberto por vez.** Restaurante com mais de um caixa precisaria associar o operador ao pagamento.
+
+## Licença
+
+MIT. Veja o arquivo [LICENSE](LICENSE).
