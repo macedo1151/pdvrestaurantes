@@ -28,6 +28,14 @@ pdv:
   servico-padrao: 10
   # Fuso do restaurante: define onde começa e termina o "dia" nos relatórios (independe do fuso da máquina/contêiner)
   fuso: America/Sao_Paulo
+  # Usuários do sistema (HTTP Basic). As senhas abaixo são só de demonstração:
+  # em uso real, defina as variáveis PDV_SENHA_* no ambiente.
+  seguranca:
+    usuarios:
+      - { login: garcom, senha: "${PDV_SENHA_GARCOM:garcom123}", perfil: GARCOM }
+      - { login: cozinha, senha: "${PDV_SENHA_COZINHA:cozinha123}", perfil: COZINHA }
+      - { login: caixa, senha: "${PDV_SENHA_CAIXA:caixa123}", perfil: CAIXA }
+      - { login: gerente, senha: "${PDV_SENHA_GERENTE:gerente123}", perfil: GERENTE }
 
 ---
 spring:

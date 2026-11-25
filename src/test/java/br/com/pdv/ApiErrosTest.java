@@ -4,9 +4,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -20,35 +22,41 @@ class ApiErrosTest {
 
     @Autowired MockMvc mvc;
 
+    private MockHttpServletRequestBuilder gerente(MockHttpServletRequestBuilder req) {
+        HttpHeaders h = new HttpHeaders();
+        h.setBasicAuth("gerente", "gerente123");
+        return req.headers(h);
+    }
+
     @Test
     void recursoInexistenteDevolve404ComProblemDetail() throws Exception {
-        mvc.perform(get("/api/comandas/999999"))
+        mvc.perform(gerente(get("/api/comandas/999999")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("Comanda 999999 não encontrado(a)"));
     }
 
     @Test
     void validacaoDevolve400ComOsCamposInvalidos() throws Exception {
-        mvc.perform(post("/api/mesas").contentType(MediaType.APPLICATION_JSON).content("{\"numero\":0}"))
+        mvc.perform(gerente(post("/api/mesas")).contentType(MediaType.APPLICATION_JSON).content("{\"numero\":0}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.campos.numero").exists());
     }
 
     @Test
     void jsonMalformadoDevolve400() throws Exception {
-        mvc.perform(post("/api/mesas").contentType(MediaType.APPLICATION_JSON).content("{nao é json"))
+        mvc.perform(gerente(post("/api/mesas")).contentType(MediaType.APPLICATION_JSON).content("{nao é json"))
                 .andExpect(status().isBadRequest());
     }
 
     @Test
     void relatorioComIntervaloInvertidoDevolve409() throws Exception {
-        mvc.perform(get("/api/relatorios/vendas?de=2026-02-10&ate=2026-02-01"))
+        mvc.perform(gerente(get("/api/relatorios/vendas?de=2026-02-10&ate=2026-02-01")))
                 .andExpect(status().isConflict());
     }
 
     @Test
     void relatorioVazioFunciona() throws Exception {
-        mvc.perform(get("/api/relatorios/vendas?de=2020-01-01&ate=2020-01-31"))
+        mvc.perform(gerente(get("/api/relatorios/vendas?de=2020-01-01&ate=2020-01-31")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.comandas").value(0));
     }

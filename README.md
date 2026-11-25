@@ -41,7 +41,7 @@ Sobe na porta 8080 com um banco H2 em arquivo (`./data/pdv`) e já carrega um ca
 10 mesas, para dar para testar sem cadastrar nada.
 
 Abra http://localhost:8080 no navegador. Essa é a interface do restaurante (salão, cozinha, caixa, estoque,
-cardápio e relatórios), explicada na próxima seção. A API que ela usa continua aberta:
+cardápio e relatórios), explicada na próxima seção. O navegador pede usuário e senha na primeira chamada (veja "Perfis e permissões" abaixo; para testar tudo, entre como `gerente` / `gerente123`). Links úteis:
 
 - Documentação interativa da API: http://localhost:8080/swagger
 - Tela cheia da fila de produção, para deixar numa TV na cozinha: http://localhost:8080/kds.html
@@ -75,39 +75,58 @@ A interface roda no navegador, sem instalar nada além do servidor. Funciona em 
 
 O primeiro passo do dia é abrir o caixa. Sem caixa aberto o sistema não aceita pagamento (ver as decisões abaixo).
 
+## Perfis e permissões
+
+A API usa HTTP Basic, sem sessão, e cada usuário tem um perfil. A tela abre sem login; as chamadas à API é que
+são autenticadas. Sem credenciais a resposta é `401`; com credenciais de um perfil sem permissão, `403` (ambos
+no formato RFC 7807).
+
+| Perfil | Usuário de demonstração | Pode |
+|---|---|---|
+| `GARCOM` | `garcom` / `garcom123` | Abrir comanda, lançar e cancelar item, ver a fila, marcar entrega, calcular divisão de conta |
+| `COZINHA` | `cozinha` / `cozinha123` | Ver a fila e avançar os itens (iniciar, pronto), consultar o estoque |
+| `CAIXA` | `caixa` / `caixa123` | Abrir e fechar o caixa, receber pagamento, fechar comanda, calcular divisão de conta |
+| `GERENTE` | `gerente` / `gerente123` | Tudo, incluindo cardápio, estoque, relatórios e console do H2 |
+
+Os usuários ficam em `pdv.seguranca.usuarios` (`application.yml`) e as senhas vêm das variáveis
+`PDV_SENHA_GARCOM`, `PDV_SENHA_COZINHA`, `PDV_SENHA_CAIXA` e `PDV_SENHA_GERENTE`. **As senhas padrão são só de
+demonstração: troque-as antes de colocar o sistema em um servidor.** As regras estão em um só lugar, a classe
+`SegurancaConfig`, e o que não estiver listado lá é negado.
+
 ## O mesmo atendimento direto pela API
 
 Quem for integrar com outro sistema pode usar a API sem a interface. Os ids abaixo assumem os dados de exemplo (mesa 1 = id 1, X-Burger = id 1, cerveja = id 3).
 
 ```bash
+# todas as chamadas usam HTTP Basic (aqui, o gerente, que pode tudo)
 # 1. abrir o caixa
-curl -X POST localhost:8080/api/caixa/abrir -H 'Content-Type: application/json' \
+curl -u gerente:gerente123 -X POST localhost:8080/api/caixa/abrir -H 'Content-Type: application/json' \
   -d '{"valorAbertura": 100.00, "operador": "Ana"}'
 
 # 2. abrir a comanda da mesa 1
-curl -X POST localhost:8080/api/comandas -H 'Content-Type: application/json' -d '{"mesaId": 1}'
+curl -u gerente:gerente123 -X POST localhost:8080/api/comandas -H 'Content-Type: application/json' -d '{"mesaId": 1}'
 
 # 3. lançar itens (baixa o estoque e vai para a tela da cozinha / bar)
-curl -X POST localhost:8080/api/comandas/1/itens -H 'Content-Type: application/json' \
+curl -u gerente:gerente123 -X POST localhost:8080/api/comandas/1/itens -H 'Content-Type: application/json' \
   -d '{"produtoId": 1, "quantidade": 2, "observacao": "sem cebola"}'
-curl -X POST localhost:8080/api/comandas/1/itens -H 'Content-Type: application/json' \
+curl -u gerente:gerente123 -X POST localhost:8080/api/comandas/1/itens -H 'Content-Type: application/json' \
   -d '{"produtoId": 3, "quantidade": 2}'
 
 # 4. cozinha avança o item (PENDENTE -> EM_PREPARO -> PRONTO -> ENTREGUE); repita para os dois itens
-curl -X PATCH localhost:8080/api/itens/1/status -H 'Content-Type: application/json' -d '{"status": "EM_PREPARO"}'
+curl -u gerente:gerente123 -X PATCH localhost:8080/api/itens/1/status -H 'Content-Type: application/json' -d '{"status": "EM_PREPARO"}'
 
 # 5. a conta deu 88,00 + 10% = 96,80; o grupo quer dividir em 3 (32,27 / 32,27 / 32,26)
-curl 'localhost:8080/api/comandas/1/divisao?pessoas=3'
+curl -u gerente:gerente123 'localhost:8080/api/comandas/1/divisao?pessoas=3'
 
 # 6. cada um paga a sua parte, na forma que quiser (aqui a primeira, em dinheiro, com troco)
-curl -X POST localhost:8080/api/comandas/1/pagamentos -H 'Content-Type: application/json' \
+curl -u gerente:gerente123 -X POST localhost:8080/api/comandas/1/pagamentos -H 'Content-Type: application/json' \
   -d '{"forma": "DINHEIRO", "valor": 32.27, "valorRecebido": 50.00, "pagador": "Carla"}'
-curl -X POST localhost:8080/api/comandas/1/pagamentos -H 'Content-Type: application/json' \
+curl -u gerente:gerente123 -X POST localhost:8080/api/comandas/1/pagamentos -H 'Content-Type: application/json' \
   -d '{"forma": "PIX", "valor": 64.53, "pagador": "Beto e Dani"}'
 
 # 7. fechar a comanda (só passa com tudo pago e todos os itens entregues) e depois o caixa
-curl -X POST localhost:8080/api/comandas/1/fechar
-curl -X POST localhost:8080/api/caixa/fechar -H 'Content-Type: application/json' -d '{"valorContado": 132.27}'
+curl -u gerente:gerente123 -X POST localhost:8080/api/comandas/1/fechar
+curl -u gerente:gerente123 -X POST localhost:8080/api/caixa/fechar -H 'Content-Type: application/json' -d '{"valorContado": 132.27}'
 ```
 
 Todos os endpoints estão no Swagger, inclusive o cadastro de produtos, insumos e o relatório
@@ -287,6 +306,7 @@ Este é um ponto de partida, não um sistema pronto para colocar em produção a
 - **O esquema do banco é versionado com Flyway** (`src/main/resources/db/migration`) e o Hibernate só valida
   (`ddl-auto: validate`). Mudou uma entidade? Crie a próxima migração `V2__...sql`. Bancos H2 em arquivo criados
   antes do Flyway (pasta `./data`) precisam ser apagados para recriar o esquema.
+- **Usuários vêm da configuração, não de um cadastro.** Serve para um restaurante pequeno; com rotatividade de equipe, o passo seguinte é uma tabela de usuários (e login por token em vez de Basic).
 - **Não divide um mesmo item entre pessoas** (a porção de batata que três dividem). Nesse caso use a divisão igual.
 - **Cancelar item já pronto ou entregue** exige um fluxo de aprovação do gerente que não existe aqui.
 - **O KDS consulta por polling.** Com poucas telas funciona bem; com muitas, o próximo passo é WebSocket ou SSE.
