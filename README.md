@@ -127,15 +127,22 @@ no formato RFC 7807).
 
 | Perfil | Usuário de demonstração | Pode |
 |---|---|---|
-| `GARCOM` | `garcom` / `garcom123` | Abrir comanda, lançar e cancelar item, ver a fila, marcar entrega, calcular divisão de conta |
-| `COZINHA` | `cozinha` / `cozinha123` | Ver a fila e avançar os itens (iniciar, pronto), consultar o estoque |
+| `GARCOM` | `garcom` / `garcom123` | Abrir comanda, lançar e cancelar item, ver a fila, marcar o item como entregue, calcular divisão de conta |
+| `COZINHA` | `cozinha` / `cozinha123` | Ver a fila e avançar os itens até "pronto" (iniciar preparo, marcar pronto), consultar o estoque |
 | `CAIXA` | `caixa` / `caixa123` | Abrir e fechar o caixa, receber pagamento, fechar comanda, calcular divisão de conta |
 | `GERENTE` | `gerente` / `gerente123` | Tudo, incluindo cardápio, estoque, relatórios e console do H2 |
 
 Os usuários ficam em `pdv.seguranca.usuarios` (`application.yml`) e as senhas vêm das variáveis
 `PDV_SENHA_GARCOM`, `PDV_SENHA_COZINHA`, `PDV_SENHA_CAIXA` e `PDV_SENHA_GERENTE`. **As senhas padrão são só de
-demonstração: troque-as antes de colocar o sistema em um servidor.** As regras estão em um só lugar, a classe
+demonstração: troque-as antes de colocar o sistema em um servidor** (no `docker compose` as variáveis também são
+repassadas ao contêiner, e uma senha em branco faz a aplicação recusar a partida). As regras por URL estão em um
+só lugar, a classe
 `SegurancaConfig`, e o que não estiver listado lá é negado.
+
+Uma regra depende do **conteúdo** da requisição e por isso não cabe num padrão de URL: o `PATCH` que muda o
+status de um item. Quem pode é decidido pelo status de destino, em `Permissoes` (`@PreAuthorize` no
+controller): a cozinha inicia e finaliza o preparo mas não marca "entregue", e o garçom entrega mas não
+inicia o preparo. O gerente pode tudo. O `SegurancaTest` cobre cada combinação.
 
 ## O mesmo atendimento direto pela API
 
@@ -229,6 +236,12 @@ travar, a gravação conflitante falha com 409 em vez de sobrescrever o saldo em
 A comanda também é travada ao mexer em itens, pagamento e fechamento. Sem isso, dois pagamentos simultâneos
 poderiam somar mais que a conta.
 
+O **caixa** é travado nas duas pontas. Receber pagamento pega uma trava compartilhada (`PESSIMISTIC_READ`: vários
+pagamentos seguem juntos) e fechar o caixa pega a trava exclusiva (`PESSIMISTIC_WRITE`). Sem isso, um pagamento
+que lê o caixa como aberto no instante em que ele fecha entraria num caixa já fechado, fora do resumo e da
+contagem da gaveta. Depois do fechamento, o pagamento que estava esperando recebe "abra o caixa". A ordem é
+sempre comanda e depois caixa (o fechamento só trava o caixa), então não há ciclo de espera.
+
 ### Cancelar item: estorno ou perda, dependendo de onde ele está
 
 - Item `PENDENTE` (ninguém começou): o insumo volta ao estoque.
@@ -310,8 +323,9 @@ Alguns detalhes da interface, pensados para o fluxo de salão:
   marcada, e o restante da comanda se atualiza. É o fluxo real de mesa grande.
 - **O troco aparece enquanto o valor entregue é digitado**, para o caixa não precisar calcular de cabeça.
 - **Cancelar item em preparo avisa que haverá perda de insumo** antes de confirmar.
-- **Todo texto vindo do banco é escapado** antes de entrar no HTML, para um nome de produto com `<` ou aspas não
-  quebrar a tela nem executar script.
+- **Texto vindo do banco é sempre escapado.** A tela monta o HTML pelo React, que escapa tudo por padrão, então
+  um nome de produto com `<` ou aspas não quebra a tela nem executa script. O código não usa
+  `dangerouslySetInnerHTML`, que é o que desligaria essa proteção.
 
 ### Erros no formato RFC 7807
 
@@ -346,8 +360,9 @@ suporta. Os códigos seguem uma regra única:
 - `ApiErrosTest`: formato e código HTTP das respostas de erro.
 - `CorrecoesTest`: um teste para cada defeito corrigido na revisão (item cancelado voltando à fila, duas comandas
   na mesma mesa, dois caixas abertos, perda contada em dobro, estorno com a ficha errada, centavo na divisão por
-  itens, relatório no fuso errado).
-- `SegurancaTest`: `401`, `403` e o acesso de cada perfil.
+  itens, relatório no fuso errado, pagamento entrando num caixa que está fechando).
+- `SegurancaTest`: `401`, `403`, o acesso de cada perfil e quem pode levar um item a cada status.
+- `SegurancaConfigTest`: senhas guardadas com hash e recusa de senha em branco na partida.
 - `KdsEventosTest`: sobe o servidor de verdade e lê o stream SSE com um cliente HTTP real.
 - Interface (`frontend/`, Vitest e Testing Library): cliente da API, formatação, o modal de pagamento (troco,
   Pix sem valor recebido, erro da API) e o `App` (a aba do caixa não remonta em loop).

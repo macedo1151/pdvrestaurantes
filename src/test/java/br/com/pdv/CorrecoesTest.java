@@ -1,10 +1,13 @@
 package br.com.pdv;
 
+import br.com.pdv.domain.Caixa;
 import br.com.pdv.domain.Comanda;
 import br.com.pdv.domain.FormaPagamento;
 import br.com.pdv.domain.Praca;
+import br.com.pdv.domain.StatusCaixa;
 import br.com.pdv.domain.StatusItem;
 import br.com.pdv.dto.Dtos.*;
+import br.com.pdv.repository.CaixaRepository;
 import br.com.pdv.repository.ComandaRepository;
 import br.com.pdv.service.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,6 +45,7 @@ class CorrecoesTest {
     @Autowired RelatorioService relatorio;
     @Autowired JdbcTemplate jdbc;
     @Autowired ComandaRepository comandaRepo;
+    @Autowired CaixaRepository caixaRepo;
     @Autowired PlatformTransactionManager tm;
 
     @BeforeEach
@@ -108,6 +112,42 @@ class CorrecoesTest {
 
         assertThat(sucessos).isEqualTo(1);
         assertThat(jdbc.queryForObject("select count(*) from caixa where status = 'ABERTO'", Integer.class)).isEqualTo(1);
+    }
+
+    // ---------- pagamento x fechamento do caixa ----------
+
+    @Test
+    void pagamentoEsperaOFechamentoDoCaixaEmAndamentoENaoEntraNoCaixaFechado() throws Exception {
+        ProdutoDto prato = produto("Prato", "20.00", Praca.BAR);
+        caixa.abrir(new AbrirCaixaRequest(new BigDecimal("100.00"), "ana"));
+        ComandaDto c = novaComanda(1);
+        c = comandas.adicionarItem(c.id(), new NovoItemRequest(prato.id(), 1, null));
+        Long comandaId = c.id();
+
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        try {
+            // "o fechamento do caixa" está em curso: segura a trava do caixa e o fecha dentro da transação
+            Future<String> pagamento = new TransactionTemplate(tm).execute(status -> {
+                Caixa travado = caixaRepo.findByStatusForUpdate(StatusCaixa.ABERTO).orElseThrow();
+                Future<String> f = pool.submit(() -> {
+                    try {
+                        comandas.pagar(comandaId, new PagamentoRequest(FormaPagamento.PIX, new BigDecimal("10.00"), null, null));
+                        return "pagou";
+                    } catch (RegraDeNegocioException e) {
+                        return e.getMessage();
+                    }
+                });
+                // sem a trava o pagamento passaria direto e entraria num caixa que está fechando
+                assertThatThrownBy(() -> f.get(700, TimeUnit.MILLISECONDS)).isInstanceOf(TimeoutException.class);
+                travado.fechar(new BigDecimal("100.00"));
+                return f;
+            });
+
+            assertThat(pagamento.get(10, TimeUnit.SECONDS)).containsIgnoringCase("caixa");
+        } finally {
+            pool.shutdownNow();
+        }
+        assertThat(jdbc.queryForObject("select count(*) from pagamento", Integer.class)).isZero();
     }
 
     // ---------- histórico de estoque ----------

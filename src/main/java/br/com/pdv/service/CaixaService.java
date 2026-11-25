@@ -43,9 +43,14 @@ public class CaixaService {
                 .orElseThrow(() -> new RegraDeNegocioException("Não há caixa aberto")));
     }
 
+    /**
+     * Fecha o caixa com a linha travada: espera os pagamentos em andamento (que seguram a trava compartilhada, ver
+     * {@code ComandaService.pagar}) e impede que novos entrem enquanto o resumo é calculado. Assim nenhum pagamento
+     * cai num caixa que acabou de fechar e fica fora do resumo.
+     */
     @Transactional
     public CaixaDto fechar(FecharCaixaRequest r) {
-        Caixa caixa = caixas.findFirstByStatus(StatusCaixa.ABERTO)
+        Caixa caixa = caixas.findByStatusForUpdate(StatusCaixa.ABERTO)
                 .orElseThrow(() -> new RegraDeNegocioException("Não há caixa aberto"));
         caixa.fechar(Money.of(r.valorContado()));
         return resumo(caixa);

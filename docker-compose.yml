@@ -22,6 +22,12 @@ services:
       DB_URL: jdbc:postgresql://db:5432/pdv
       DB_USER: pdv
       DB_PASSWORD: pdv
+      # Senhas dos usuários do sistema, repassadas do ambiente (ou de um arquivo .env ao lado deste).
+      # Os valores depois de ":-" são só de demonstração: defina as variáveis antes de usar num servidor.
+      PDV_SENHA_GARCOM: ${PDV_SENHA_GARCOM:-garcom123}
+      PDV_SENHA_COZINHA: ${PDV_SENHA_COZINHA:-cozinha123}
+      PDV_SENHA_CAIXA: ${PDV_SENHA_CAIXA:-caixa123}
+      PDV_SENHA_GERENTE: ${PDV_SENHA_GERENTE:-gerente123}
     ports:
       - "8080:8080"
 

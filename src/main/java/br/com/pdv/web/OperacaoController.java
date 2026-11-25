@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -45,6 +46,8 @@ public class OperacaoController {
         return kdsEventos.assinar(praca);
     }
 
+    /** O perfil é conferido pelo status de destino: a cozinha não entrega e o garçom não inicia o preparo. */
+    @PreAuthorize("@permissoes.podeMudarStatus(authentication, #r.status())")
     @PatchMapping("/itens/{id}/status")
     public KdsItemDto mudarStatus(@PathVariable Long id, @Valid @RequestBody MudarStatusRequest r) {
         return kds.mudarStatus(id, r.status());

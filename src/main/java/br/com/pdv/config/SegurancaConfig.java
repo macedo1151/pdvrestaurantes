@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -32,6 +33,7 @@ import static br.com.pdv.config.Perfil.*;
  */
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity // regras que dependem do corpo da requisição, via @PreAuthorize (ver Permissoes)
 @EnableConfigurationProperties(SegurancaProperties.class)
 public class SegurancaConfig {
 
@@ -100,6 +102,13 @@ public class SegurancaConfig {
         List<SegurancaProperties.Usuario> lista = props.usuarios();
         if (lista == null || lista.isEmpty()) {
             throw new IllegalStateException("Configure ao menos um usuário em pdv.seguranca.usuarios");
+        }
+        // Uma variável de ambiente definida como vazia vence o valor padrão do application.yml e viraria senha em
+        // branco: melhor recusar na partida do que subir com um usuário sem senha.
+        for (SegurancaProperties.Usuario u : lista) {
+            if (u.login() == null || u.login().isBlank() || u.senha() == null || u.senha().isBlank() || u.perfil() == null) {
+                throw new IllegalStateException("Usuário '" + u.login() + "' sem login, senha ou perfil em pdv.seguranca.usuarios");
+            }
         }
         UserDetails[] detalhes = lista.stream()
                 .map(u -> User.withUsername(u.login()).password(encoder.encode(u.senha()))

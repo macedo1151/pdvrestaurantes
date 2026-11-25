@@ -103,7 +103,40 @@ class SegurancaTest {
                 .andExpect(status().isBadRequest()); // passou pela autorização e falhou na validação
     }
 
+    // ---------- permissão por status de destino ----------
+
+    @Test
+    void oStatusDoItemDependeDoPerfil() throws Exception {
+        // Item inexistente: 404 prova que passou pela autorização e chegou ao serviço; 403 é a negativa.
+        // Cozinha inicia e finaliza o preparo; garçom entrega; gerente faz tudo.
+        mudarStatus("cozinha", "EM_PREPARO").andExpect(status().isNotFound());
+        mudarStatus("cozinha", "PRONTO").andExpect(status().isNotFound());
+        mudarStatus("cozinha", "ENTREGUE").andExpect(status().isForbidden());
+
+        mudarStatus("garcom", "ENTREGUE").andExpect(status().isNotFound());
+        mudarStatus("garcom", "EM_PREPARO").andExpect(status().isForbidden());
+        mudarStatus("garcom", "PRONTO").andExpect(status().isForbidden());
+
+        mudarStatus("gerente", "EM_PREPARO").andExpect(status().isNotFound());
+        mudarStatus("gerente", "ENTREGUE").andExpect(status().isNotFound());
+
+        mudarStatus("caixa", "ENTREGUE").andExpect(status().isForbidden());
+    }
+
+    @Test
+    void negativaPorStatusSaiNoFormatoProblemDetail() throws Exception {
+        mudarStatus("cozinha", "ENTREGUE")
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.title").value("Forbidden"));
+    }
+
     // ---------- helpers ----------
+
+    private org.springframework.test.web.servlet.ResultActions mudarStatus(String usuario, String novo) throws Exception {
+        return mvc.perform(como(usuario, patch("/api/itens/999999/status"))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"" + novo + "\"}"));
+    }
 
     private MockHttpServletRequestBuilder como(String usuario, MockHttpServletRequestBuilder req) {
         HttpHeaders h = new HttpHeaders();

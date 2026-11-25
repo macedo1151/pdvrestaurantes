@@ -96,8 +96,13 @@ public class ComandaService {
     @Transactional
     public ComandaDto pagar(Long comandaId, PagamentoRequest r) {
         Comanda c = abertaTravada(comandaId);
-        Caixa caixa = caixas.findFirstByStatus(StatusCaixa.ABERTO)
+        // Trava compartilhada do caixa: vários pagamentos seguem juntos, mas nenhum entra enquanto o caixa está
+        // sendo fechado (a ordem é sempre comanda, depois caixa; o fechamento só trava o caixa, sem ciclo).
+        Caixa caixa = caixas.findByStatusForShare(StatusCaixa.ABERTO)
                 .orElseThrow(() -> new RegraDeNegocioException("Abra o caixa antes de receber pagamentos"));
+        if (caixa.getStatus() != StatusCaixa.ABERTO) {
+            throw new RegraDeNegocioException("Abra o caixa antes de receber pagamentos");
+        }
         if (c.itensAtivos().isEmpty()) {
             throw new RegraDeNegocioException("A comanda não tem itens");
         }
