@@ -8,7 +8,8 @@ spring:
   jpa:
     open-in-view: false
     hibernate:
-      ddl-auto: update
+      # O esquema é versionado pelo Flyway (db/migration); o Hibernate só confere se bate com as entidades
+      ddl-auto: validate
   h2:
     console:
       enabled: true

@@ -1,6 +1,8 @@
 # PDV Restaurante
 
-API de ponto de venda para restaurante feita em Java 21 e Spring Boot 3. Em vez de tentar cobrir tudo que um PDV
+[![CI](https://github.com/macedo1151/pdvrestaurantes/actions/workflows/ci.yml/badge.svg)](https://github.com/macedo1151/pdvrestaurantes/actions/workflows/ci.yml)
+
+API de ponto de venda para restaurante feita em Java 21 e Spring Boot 4. Em vez de tentar cobrir tudo que um PDV
 faz, o projeto ataca quatro problemas que aparecem todo dia em salão e cozinha e que costumam ser resolvidos
 no improviso:
 
@@ -282,8 +284,9 @@ Este é um ponto de partida, não um sistema pronto para colocar em produção a
   gerente (Spring Security). Até lá, rode o sistema só numa rede interna do restaurante.
 - **A interface não tem testes automatizados.** O back-end tem; a tela foi verificada à mão no navegador.
 - **Sem emissão fiscal** (NFC-e/SAT) nem integração com maquininha ou impressora.
-- **O esquema do banco é gerado pelo Hibernate** (`ddl-auto: update`). Serve para começar; em produção o certo é
-  migração versionada com Flyway ou Liquibase.
+- **O esquema do banco é versionado com Flyway** (`src/main/resources/db/migration`) e o Hibernate só valida
+  (`ddl-auto: validate`). Mudou uma entidade? Crie a próxima migração `V2__...sql`. Bancos H2 em arquivo criados
+  antes do Flyway (pasta `./data`) precisam ser apagados para recriar o esquema.
 - **Não divide um mesmo item entre pessoas** (a porção de batata que três dividem). Nesse caso use a divisão igual.
 - **Cancelar item já pronto ou entregue** exige um fluxo de aprovação do gerente que não existe aqui.
 - **O KDS consulta por polling.** Com poucas telas funciona bem; com muitas, o próximo passo é WebSocket ou SSE.
