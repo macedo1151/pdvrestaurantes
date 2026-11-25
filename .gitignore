@@ -4,3 +4,6 @@ data/
 .idea/
 .vscode/
 *.log
+frontend/node/
+frontend/node_modules/
+frontend/dist/

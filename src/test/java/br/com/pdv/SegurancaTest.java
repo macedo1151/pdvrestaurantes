@@ -43,7 +43,9 @@ class SegurancaTest {
 
     @Test
     void telaEstaticaAbreSemLogin() throws Exception {
-        mvc.perform(get("/index.html")).andExpect(status().isOk());
+        // Não pode pedir login. (Se o build do frontend foi pulado o arquivo não existe, e aí é 404, não 401.)
+        mvc.perform(get("/index.html")).andExpect(result ->
+                org.assertj.core.api.Assertions.assertThat(result.getResponse().getStatus()).isNotEqualTo(401));
     }
 
     // ---------- autorização por perfil ----------

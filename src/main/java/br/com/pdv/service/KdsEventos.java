@@ -3,6 +3,7 @@ package br.com.pdv.service;
 import br.com.pdv.domain.Praca;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.SmartLifecycle;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -24,7 +25,9 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * O evento não carrega a fila, só avisa que ela mudou: a tela consulta a API, que continua sendo a única fonte.
  */
 @Component
-public class KdsEventos {
+public class KdsEventos implements SmartLifecycle {
+
+    private volatile boolean rodando;
 
     private static final Logger log = LoggerFactory.getLogger(KdsEventos.class);
     /** Passado esse tempo o navegador reconecta sozinho (EventSource), o que também limpa conexões mortas. */
@@ -67,8 +70,42 @@ public class KdsEventos {
         }
     }
 
-    int assinantes(Praca praca) {
-        return assinantes.get(praca).size();
+    // ---------- ciclo de vida ----------
+
+    @Override
+    public void start() {
+        rodando = true;
+    }
+
+    /**
+     * Ao desligar o servidor, encerra os streams abertos. O Spring Boot desliga o Tomcat de forma graciosa,
+     * esperando as requisições ativas terminarem, e um stream SSE nunca termina sozinho: sem isto cada deploy
+     * esperaria o tempo limite inteiro (30 s). O navegador reconecta ao novo servidor por conta própria.
+     */
+    @Override
+    public void stop() {
+        rodando = false;
+        for (Set<SseEmitter> grupo : assinantes.values()) {
+            for (SseEmitter emissor : grupo) {
+                try {
+                    emissor.complete();
+                } catch (RuntimeException ignorado) {
+                    // já estava encerrado
+                }
+            }
+            grupo.clear();
+        }
+    }
+
+    @Override
+    public boolean isRunning() {
+        return rodando;
+    }
+
+    /** Fase mais alta que a do desligamento gracioso do servidor web: este para primeiro. */
+    @Override
+    public int getPhase() {
+        return SmartLifecycle.DEFAULT_PHASE;
     }
 
     private void enviar(Praca praca, SseEmitter.SseEventBuilder evento) {

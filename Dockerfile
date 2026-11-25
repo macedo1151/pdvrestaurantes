@@ -3,6 +3,8 @@ WORKDIR /app
 COPY pom.xml .
 RUN mvn -q dependency:go-offline
 COPY src ./src
+COPY frontend ./frontend
+# O build do frontend (React + TypeScript) roda dentro do Maven: o plugin baixa o Node sozinho
 RUN mvn -q package -DskipTests
 
 FROM eclipse-temurin:21-jre

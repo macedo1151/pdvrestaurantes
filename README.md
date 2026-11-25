@@ -25,13 +25,14 @@ Este README explica o que cada parte faz e por que foi feita daquele jeito.
 | Pagamento parcial | Vários pagamentos na mesma conta, em formas diferentes, com troco no dinheiro. |
 | Ficha técnica | Cada produto declara quanto de cada insumo usa. Lançar o item baixa o estoque na hora. |
 | Estoque | Entrada de mercadoria, alerta de estoque mínimo, histórico de movimentos. |
-| KDS | Fila por praça (cozinha, bar, sobremesa) com tempo de espera. Há uma tela pronta em `/kds.html`. |
+| KDS | Fila por praça (cozinha, bar, sobremesa) com tempo de espera. Há uma tela cheia em `/#kds`. |
 | Caixa | Abertura, fechamento e conferência do dinheiro da gaveta contra o esperado. |
 | Relatório | Faturamento, custo da mercadoria, margem, ticket médio e produtos mais vendidos. |
 
 ## Como rodar
 
-Precisa de Java 21 e Maven 3.9+.
+Precisa de Java 21 e Maven 3.9+. **Não precisa de Node**: o Maven baixa o próprio Node para montar a interface
+(`frontend/`), então a primeira build precisa de internet.
 
 ```bash
 mvn spring-boot:run
@@ -44,7 +45,7 @@ Abra http://localhost:8080 no navegador. Essa é a interface do restaurante (sal
 cardápio e relatórios), explicada na próxima seção. O navegador pede usuário e senha na primeira chamada (veja "Perfis e permissões" abaixo; para testar tudo, entre como `gerente` / `gerente123`). Links úteis:
 
 - Documentação interativa da API: http://localhost:8080/swagger
-- Tela cheia da fila de produção, para deixar numa TV na cozinha: http://localhost:8080/kds.html
+- Tela cheia da fila de produção, para deixar numa TV na cozinha: http://localhost:8080/#kds
 
 Com PostgreSQL e Docker:
 
@@ -52,11 +53,23 @@ Com PostgreSQL e Docker:
 docker compose up --build
 ```
 
-Testes:
+Testes (back-end, com JUnit, e interface, com Vitest, tudo no mesmo comando):
 
 ```bash
 mvn test
 ```
+
+Para mexer só na interface, com recarga automática, suba o back-end (`mvn spring-boot:run`) e, em outro
+terminal, o servidor de desenvolvimento do Vite, que repassa `/api` para a porta 8080:
+
+```bash
+cd frontend
+npm install
+npm run dev        # http://localhost:5173
+npm test           # testes da interface
+```
+
+Para mexer só no back-end sem refazer a interface: `mvn test -Dskip.installnodenpm -Dskip.npm`.
 
 ## Como o restaurante usa
 
@@ -236,13 +249,23 @@ corrige no próximo. Três cuidados:
   sozinho, passa por HTTP comum (inclusive a autenticação) e não pede protocolo novo. Um batimento a cada 25 s
   mantém a conexão viva atrás de proxies. A tela ainda atualiza a cada 30 s só para os minutos de espera.
 
-### Interface em HTML, CSS e JavaScript puros, sem framework
+### Interface em React + TypeScript, servida pelo próprio Spring
 
-A tela é servida pelo próprio Spring (pasta `static`). Foi uma escolha de propósito: não há Node, build nem
-segunda aplicação para subir. Quem baixa o projeto roda um comando e tem o sistema completo, e o restaurante
-pequeno que não tem quem cuide de infraestrutura mantém um serviço só. O custo é código de tela mais manual; se o
-projeto crescer muito, vale migrar para React ou Vue.
+A interface é um projeto Vite com React 19 e TypeScript em modo estrito (`frontend/`). O build roda dentro do
+Maven (`frontend-maven-plugin`, que baixa o Node sozinho) e o resultado vai para dentro do jar. Assim o restaurante
+continua subindo **um serviço só**, sem segunda aplicação nem servidor de arquivos, e quem baixa o projeto continua
+rodando um comando. Decisões que valem registrar:
 
+- **Tipos espelham os DTOs da API** (`api/types.ts`) e um único cliente HTTP (`api/client.ts`) converte o
+  `ProblemDetail` em mensagem legível. Nenhuma tela chama `fetch` direto.
+- **Poucas dependências**: só React. Sem biblioteca de estado, de rotas ou de requisições; o que a tela precisa
+  cabe em dois hooks (`useLoad`, com polling e descarte de resposta atrasada, e `useKdsFila`, com SSE) e na rota
+  por `#hash`.
+- **Componentes de tela ficam fora de outros componentes.** Declarar um componente dentro do `App` cria um tipo
+  novo a cada render e o React recria a tela inteira em loop (aconteceu com a aba do caixa e hoje há um teste
+  para isso).
+- **O Spring serve o resultado do build** e o login (HTTP Basic) continua sendo do navegador, o que dispensa
+  tratar token no código da tela.
 Alguns detalhes da interface, pensados para o fluxo de salão:
 
 - **Cada toque num produto vira um item.** Os toques entram numa fila e chegam ao servidor na ordem. Ignorar toques
@@ -290,6 +313,13 @@ suporta. Os códigos seguem uma regra única:
   de insumo, estorno e perda, pedidos concorrentes, pagamento parcial, troco, fechamento de comanda e de caixa,
   divisões e KDS.
 - `ApiErrosTest`: formato e código HTTP das respostas de erro.
+- `CorrecoesTest`: um teste para cada defeito corrigido na revisão (item cancelado voltando à fila, duas comandas
+  na mesma mesa, dois caixas abertos, perda contada em dobro, estorno com a ficha errada, centavo na divisão por
+  itens, relatório no fuso errado).
+- `SegurancaTest`: `401`, `403` e o acesso de cada perfil.
+- `KdsEventosTest`: sobe o servidor de verdade e lê o stream SSE com um cliente HTTP real.
+- Interface (`frontend/`, Vitest e Testing Library): cliente da API, formatação, o modal de pagamento (troco,
+  Pix sem valor recebido, erro da API) e o `App` (a aba do caixa não remonta em loop).
 
 ## Estrutura
 
@@ -300,20 +330,21 @@ src/main/java/br/com/pdv
   service/     casos de uso e transações
   dto/         contratos de entrada e saída da API
   web/         controllers finos e tratamento de erros
-  config/      dados de exemplo
-src/main/resources/static
-  index.html, app.css, app.js   interface do restaurante
-  kds.html                      fila de produção em tela cheia
+  config/      segurança (perfis) e dados de exemplo
+src/main/resources/db/migration   esquema do banco versionado (Flyway)
+frontend/
+  src/api/     tipos dos DTOs e cliente HTTP
+  src/ui/      modal, avisos, hooks (useLoad, useKdsFila)
+  src/pages/   uma tela por aba (Salão, Comanda, Cozinha, Caixa, Estoque, Cardápio, Relatórios) e a fila em tela cheia
+  (o build vai para static/ dentro do jar)
 ```
 
 ## Limitações conhecidas
 
 Este é um ponto de partida, não um sistema pronto para colocar em produção amanhã. O que falta:
 
-- **Sem autenticação nem perfis.** Qualquer pessoa com acesso à rede abre qualquer aba e faz qualquer coisa
-  (inclusive cancelar item ou ver o relatório). Para uso real é preciso login e separar garçom, cozinha, caixa e
-  gerente (Spring Security). Até lá, rode o sistema só numa rede interna do restaurante.
-- **A interface não tem testes automatizados.** O back-end tem; a tela foi verificada à mão no navegador.
+- **A interface não tem teste de ponta a ponta.** Há testes de componentes (jsdom), mas nenhum dirige um navegador
+  de verdade (Playwright seria o próximo passo); o fluxo completo foi conferido à mão.
 - **Sem emissão fiscal** (NFC-e/SAT) nem integração com maquininha ou impressora.
 - **O esquema do banco é versionado com Flyway** (`src/main/resources/db/migration`) e o Hibernate só valida
   (`ddl-auto: validate`). Mudou uma entidade? Crie a próxima migração `V2__...sql`. Bancos H2 em arquivo criados
