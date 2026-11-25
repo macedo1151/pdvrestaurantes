@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/macedo1151/pdvrestaurantes/actions/workflows/ci.yml/badge.svg)](https://github.com/macedo1151/pdvrestaurantes/actions/workflows/ci.yml)
 
-API de ponto de venda para restaurante feita em Java 21 e Spring Boot 4. Em vez de tentar cobrir tudo que um PDV
+Ponto de venda para restaurante: API em Java 21 e Spring Boot 4, com a interface em React e TypeScript no mesmo jar. Em vez de tentar cobrir tudo que um PDV
 faz, o projeto ataca quatro problemas que aparecem todo dia em salão e cozinha e que costumam ser resolvidos
 no improviso:
 
@@ -28,6 +28,37 @@ Este README explica o que cada parte faz e por que foi feita daquele jeito.
 | KDS | Fila por praça (cozinha, bar, sobremesa) com tempo de espera. Há uma tela cheia em `/#kds`. |
 | Caixa | Abertura, fechamento e conferência do dinheiro da gaveta contra o esperado. |
 | Relatório | Faturamento, custo da mercadoria, margem, ticket médio e produtos mais vendidos. |
+
+## Telas
+
+Capturas do sistema com dados de exemplo, depois de um turno simulado (mesas em estágios diferentes, quatro
+comandas já fechadas e um insumo abaixo do mínimo).
+
+**Salão e comanda.** O mapa de mesas mostra o total de cada conta e um balão quando há item pronto para levar. A
+comanda lança os itens com um toque, mostra o estágio de cada um e o que falta pagar.
+
+| Salão | Comanda |
+|---|---|
+| <img src="docs/img/salao.jpg" alt="Mapa de mesas do salão, com totais e itens prontos"> | <img src="docs/img/comanda.jpg" alt="Comanda da mesa 1 com itens, pagamento parcial e totais"> |
+
+**Divisão de conta e cozinha.** A divisão rateia os centavos (R$ 91,00 em três vira 30,34 + 30,33 + 30,33) e cada
+parte é recebida na forma que a pessoa quiser. A fila da cozinha se atualiza sozinha (SSE) e há uma versão em tela
+cheia, em tema escuro, para deixar numa TV.
+
+| Divisão de conta | Cozinha e bar |
+|---|---|
+| <img src="docs/img/divisao-conta.jpg" alt="Divisão da conta em três partes iguais"> | <img src="docs/img/cozinha.jpg" alt="Fila de produção da cozinha, com itens na fila e em preparo"> |
+
+| Fila em tela cheia (`/#kds`) | Caixa |
+|---|---|
+| <img src="docs/img/kds-tela-cheia.jpg" alt="Fila de produção em tela cheia, tema escuro"> | <img src="docs/img/caixa.jpg" alt="Caixa aberto, com o total por forma de pagamento e o dinheiro esperado na gaveta"> |
+
+**Estoque e relatório.** O estoque destaca o que precisa de reposição; o relatório mostra faturamento, custo
+da mercadoria, margem e o ranking de produtos do período.
+
+| Estoque | Relatório de vendas |
+|---|---|
+| <img src="docs/img/estoque.jpg" alt="Lista de insumos, com o Molho especial destacado para reposição"> | <img src="docs/img/relatorios.jpg" alt="Relatório de vendas com indicadores e produtos mais vendidos"> |
 
 ## Como rodar
 
