@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KDS - Cozinha</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #1b1b1f; color: #eee; }
+  header { padding: 12px 16px; background: #26262c; display: flex; gap: 12px; align-items: center; }
+  select { font-size: 16px; padding: 4px; }
+  #fila { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; padding: 16px; }
+  .card { background: #2d2d35; border-radius: 8px; padding: 12px; border-left: 6px solid #888; }
+  .card.EM_PREPARO { border-color: #e6a700; }
+  .card.atrasado { border-color: #e5484d; }
+  .mesa { font-size: 13px; opacity: .7; }
+  .nome { font-size: 20px; margin: 4px 0; }
+  .obs { color: #f2c94c; font-size: 14px; }
+  button { margin-top: 8px; width: 100%; padding: 10px; font-size: 16px; border: 0; border-radius: 6px; cursor: pointer; }
+  #erro { color: #ff8585; padding: 0 16px; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Fila de produção</strong>
+  <select id="praca">
+    <option>COZINHA</option><option>BAR</option><option>SOBREMESA</option>
+  </select>
+  <span id="atualizado" class="mesa"></span>
+</header>
+<div id="erro"></div>
+<div id="fila"></div>
+<script>
+const LIMITE_ATRASO_MIN = 15;
+const el = id => document.getElementById(id);
+
+async function carregar() {
+  try {
+    const r = await fetch('/api/kds/' + el('praca').value);
+    const itens = await r.json();
+    el('erro').textContent = '';
+    el('fila').innerHTML = '';
+    for (const i of itens) {
+      const atrasado = i.minutosEspera >= LIMITE_ATRASO_MIN;
+      const c = document.createElement('div');
+      c.className = 'card ' + i.status + (atrasado ? ' atrasado' : '');
+      const proximo = i.status === 'PENDENTE' ? 'EM_PREPARO' : 'PRONTO';
+      c.innerHTML = `<div class="mesa">Mesa ${i.mesa} · ${i.minutosEspera} min</div>
+        <div class="nome">${i.quantidade}x ${esc(i.produto)}</div>
+        ${i.observacao ? `<div class="obs">${esc(i.observacao)}</div>` : ''}
+        <button>${proximo === 'EM_PREPARO' ? 'Iniciar preparo' : 'Marcar como pronto'}</button>`;
+      c.querySelector('button').onclick = async () => {
+        await fetch('/api/itens/' + i.itemId + '/status', {
+          method: 'PATCH', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({status: proximo})
+        });
+        carregar();
+      };
+      el('fila').appendChild(c);
+    }
+    el('atualizado').textContent = 'atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+  } catch (e) {
+    el('erro').textContent = 'Sem conexão com o servidor';
+  }
+}
+function esc(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+el('praca').onchange = carregar;
+carregar();
+setInterval(carregar, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:pdvtest;DB_CLOSE_DELAY=-1
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+  h2:
+    console:
+      enabled: false
+
+pdv:
+  seed: false
+  servico-padrao: 10
