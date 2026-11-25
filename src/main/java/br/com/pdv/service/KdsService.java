@@ -6,6 +6,7 @@ import br.com.pdv.domain.StatusItem;
 import br.com.pdv.dto.Dtos.KdsItemDto;
 import br.com.pdv.repository.ComandaRepository;
 import br.com.pdv.repository.ItemComandaRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,9 +20,12 @@ public class KdsService {
     private final ItemComandaRepository itens;
     private final ComandaRepository comandas;
 
-    public KdsService(ItemComandaRepository itens, ComandaRepository comandas) {
+    private final ApplicationEventPublisher eventos;
+
+    public KdsService(ItemComandaRepository itens, ComandaRepository comandas, ApplicationEventPublisher eventos) {
         this.itens = itens;
         this.comandas = comandas;
+        this.eventos = eventos;
     }
 
     @Transactional(readOnly = true)
@@ -45,6 +49,7 @@ public class KdsService {
             throw new RegraDeNegocioException("Não é possível ir de %s para %s".formatted(item.getStatus(), novo));
         }
         item.mudarStatus(novo);
+        eventos.publishEvent(new FilaMudou(item.getPraca()));
         return KdsItemDto.from(item);
     }
 }

@@ -222,7 +222,19 @@ voltou como troco, então contar `valorRecebido` faria a gaveta sempre "faltar" 
 Cada produto tem uma `praca` (cozinha, bar, sobremesa) e cada tela consulta só a sua fila, ordenada por hora do
 pedido, com os minutos de espera calculados no servidor. A sequência de status só anda um passo por vez
 (`PENDENTE -> EM_PREPARO -> PRONTO -> ENTREGUE`), para ninguém marcar "pronto" sem ter iniciado e distorcer o
-tempo de preparo. A tela `kds.html` consulta a API a cada 5 segundos; é simples de propósito, ver limitações.
+tempo de preparo.
+
+A fila anda em tempo real por **Server-Sent Events**: a tela abre `GET /api/kds/{praca}/eventos` e, quando um item
+é lançado, avança ou é cancelado, o servidor manda o evento `fila` e a tela busca a fila de novo na API. O evento
+não carrega dados, só avisa que mudou, então a API continua sendo a única fonte e uma tela que perdeu um aviso se
+corrige no próximo. Três cuidados:
+
+- **O aviso sai depois do commit** (`@TransactionalEventListener(AFTER_COMMIT)`). Um pedido recusado por falta de
+  estoque desfaz a transação e não avisa ninguém; e quem busca a fila logo após o aviso já enxerga o dado gravado.
+- **Cada tela só ouve a sua praça.** Um item do bar não acorda a tela da cozinha.
+- **SSE em vez de WebSocket** porque o fluxo é só servidor para tela: o `EventSource` do navegador reconecta
+  sozinho, passa por HTTP comum (inclusive a autenticação) e não pede protocolo novo. Um batimento a cada 25 s
+  mantém a conexão viva atrás de proxies. A tela ainda atualiza a cada 30 s só para os minutos de espera.
 
 ### Interface em HTML, CSS e JavaScript puros, sem framework
 
@@ -309,7 +321,7 @@ Este é um ponto de partida, não um sistema pronto para colocar em produção a
 - **Usuários vêm da configuração, não de um cadastro.** Serve para um restaurante pequeno; com rotatividade de equipe, o passo seguinte é uma tabela de usuários (e login por token em vez de Basic).
 - **Não divide um mesmo item entre pessoas** (a porção de batata que três dividem). Nesse caso use a divisão igual.
 - **Cancelar item já pronto ou entregue** exige um fluxo de aprovação do gerente que não existe aqui.
-- **O KDS consulta por polling.** Com poucas telas funciona bem; com muitas, o próximo passo é WebSocket ou SSE.
+- **Os assinantes do KDS ficam na memória do processo.** Com mais de uma instância do servidor, um evento só chega às telas ligadas na instância que o gerou; aí o caminho é um broker (Redis, PostgreSQL `LISTEN/NOTIFY`).
 - **Gorjeta fixa em percentual.** Não há gorjeta em valor nem rateio do serviço entre a equipe.
 - **Um caixa aberto por vez.** Restaurante com mais de um caixa precisaria associar o operador ao pagamento.
 

@@ -4,6 +4,7 @@ import br.com.pdv.domain.*;
 import br.com.pdv.dto.Dtos.*;
 import br.com.pdv.repository.*;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,9 +21,12 @@ public class ComandaService {
     private final EstoqueService estoque;
     private final BigDecimal servicoPadrao;
 
+    private final ApplicationEventPublisher eventos;
+
     public ComandaService(ComandaRepository comandas, MesaRepository mesas, ProdutoRepository produtos,
-                          CaixaRepository caixas, EstoqueService estoque,
+                          CaixaRepository caixas, EstoqueService estoque, ApplicationEventPublisher eventos,
                           @Value("${pdv.servico-padrao:10}") BigDecimal servicoPadrao) {
+        this.eventos = eventos;
         this.comandas = comandas;
         this.mesas = mesas;
         this.produtos = produtos;
@@ -65,6 +69,7 @@ public class ComandaService {
         novo.registrarConsumo(consumo);
         c.getItens().add(novo);
         comandas.flush(); // gera o id do item antes de montar a resposta
+        eventos.publishEvent(new FilaMudou(novo.getPraca()));
         return ComandaDto.from(c);
     }
 
@@ -84,6 +89,7 @@ public class ComandaService {
         if (c.restante().signum() < 0) {
             throw new RegraDeNegocioException("O cancelamento deixaria a comanda com mais pagamentos que o total");
         }
+        eventos.publishEvent(new FilaMudou(item.getPraca()));
         return ComandaDto.from(c);
     }
 

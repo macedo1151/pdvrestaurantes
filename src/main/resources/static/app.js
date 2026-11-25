@@ -72,7 +72,7 @@ document.addEventListener('keydown', e => {
 const state = { tab: 'salao', praca: 'COZINHA' };
 const TABS = {
   salao: [renderSalao, 8000],
-  cozinha: [renderCozinha, 5000],
+  cozinha: [renderCozinha, 30000],
   caixa: [renderCaixa, 0],
   estoque: [renderEstoque, 0],
   cardapio: [renderCardapio, 0],
@@ -88,9 +88,27 @@ function go(tab) {
   history.replaceState(null, '', '#' + tab);
   $$('#menu button').forEach(b => b.classList.toggle('ativo', b.dataset.tab === tab));
   clearInterval(timer);
+  assinarKds(tab === 'cozinha');
   const [fn, ms] = TABS[tab];
   tentar(fn);
   if (ms) timer = setInterval(() => { if (!$('.overlay')) tentar(fn); }, ms);
+}
+
+/* Fila da cozinha em tempo real (SSE): o servidor avisa quando a fila da praça muda.
+   O polling da aba fica só para atualizar os minutos de espera. */
+let fonteKds;
+let pracaKds;
+function assinarKds(ativo) {
+  if (!ativo || pracaKds !== state.praca) {
+    fonteKds?.close();
+    fonteKds = null;
+    pracaKds = null;
+  }
+  if (!ativo || fonteKds) return;
+  pracaKds = state.praca;
+  fonteKds = new EventSource('/api/kds/' + pracaKds + '/eventos');
+  const atualizar = () => { if (viva('cozinha') && !$('.overlay')) tentar(renderCozinha); };
+  fonteKds.addEventListener('fila', atualizar);
 }
 
 async function atualizarPill() {
@@ -371,7 +389,7 @@ async function renderCozinha() {
       <button data-item="${i.itemId}" data-prox="${i.status === 'PENDENTE' ? 'EM_PREPARO' : 'PRONTO'}" class="${i.status === 'PENDENTE' ? '' : 'ok'}">
         ${i.status === 'PENDENTE' ? 'Iniciar preparo' : 'Marcar como pronto'}</button></div>`).join('')}</div>`
       : '<p class="vazio">Fila vazia.</p>'}`;
-  $$('[data-praca]').forEach(b => b.onclick = () => { state.praca = b.dataset.praca; tentar(renderCozinha); });
+  $$('[data-praca]').forEach(b => b.onclick = () => { state.praca = b.dataset.praca; assinarKds(true); tentar(renderCozinha); });
   $$('[data-item]').forEach(b => b.onclick = () => tentar(async () => {
     await api(`/itens/${b.dataset.item}/status`, 'PATCH', { status: b.dataset.prox });
     renderCozinha();

@@ -63,9 +63,21 @@ async function carregar() {
   }
 }
 function esc(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-el('praca').onchange = carregar;
+
+// Tempo real: o servidor avisa (SSE) quando a fila da praça muda e a tela busca a fila de novo.
+// O EventSource reconecta sozinho se a conexão cair; ao reconectar, o evento "conectado" recarrega a fila.
+let fonte;
+function assinar() {
+  if (fonte) fonte.close();
+  fonte = new EventSource('/api/kds/' + el('praca').value + '/eventos');
+  fonte.addEventListener('conectado', carregar);
+  fonte.addEventListener('fila', carregar);
+}
+el('praca').onchange = () => { assinar(); carregar(); };
+assinar();
 carregar();
-setInterval(carregar, 5000);
+// Só os "minutos de espera" mudam sem evento; basta atualizar de vez em quando.
+setInterval(carregar, 30000);
 </script>
 </body>
 </html>

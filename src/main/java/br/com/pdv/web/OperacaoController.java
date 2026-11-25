@@ -3,12 +3,15 @@ package br.com.pdv.web;
 import br.com.pdv.domain.Praca;
 import br.com.pdv.dto.Dtos.*;
 import br.com.pdv.service.CaixaService;
+import br.com.pdv.service.KdsEventos;
 import br.com.pdv.service.KdsService;
 import br.com.pdv.service.RelatorioService;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -22,8 +25,11 @@ public class OperacaoController {
     private final CaixaService caixa;
     private final RelatorioService relatorios;
 
-    public OperacaoController(KdsService kds, CaixaService caixa, RelatorioService relatorios) {
+    private final KdsEventos kdsEventos;
+
+    public OperacaoController(KdsService kds, KdsEventos kdsEventos, CaixaService caixa, RelatorioService relatorios) {
         this.kds = kds;
+        this.kdsEventos = kdsEventos;
         this.caixa = caixa;
         this.relatorios = relatorios;
     }
@@ -31,6 +37,12 @@ public class OperacaoController {
     @GetMapping("/kds/{praca}")
     public List<KdsItemDto> fila(@PathVariable Praca praca) {
         return kds.fila(praca);
+    }
+
+    /** Fluxo de eventos (SSE): avisa quando a fila da praça muda, para a tela não depender de polling. */
+    @GetMapping(path = "/kds/{praca}/eventos", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter eventos(@PathVariable Praca praca) {
+        return kdsEventos.assinar(praca);
     }
 
     @PatchMapping("/itens/{id}/status")
